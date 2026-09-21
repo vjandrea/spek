@@ -53,10 +53,13 @@ jobs:
   macos-app:
     strategy:
       matrix:
+        # macos-13/14 were removed from GitHub's hosted runner fleet
+        # (GitHub only keeps the latest 2 macOS versions). Bump these again
+        # once macOS 15 ages out the same way.
         include:
-          - os: macos-13
+          - os: macos-15-large
             arch: x86_64
-          - os: macos-14
+          - os: macos-15
             arch: arm64
     runs-on: ${{ matrix.os }}
     steps:

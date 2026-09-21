@@ -41,8 +41,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-13 = Intel, macos-14 = Apple Silicon
-        os: [macos-13, macos-14]
+        # macos-13/14 were removed from GitHub's hosted runner fleet
+        # (GitHub only keeps the latest 2 macOS versions); macos-15-large is
+        # Intel, macos-15 is Apple Silicon. Bump these again once macOS 15
+        # ages out the same way.
+        os: [macos-15-large, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
