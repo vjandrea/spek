@@ -69,7 +69,12 @@ jobs:
         env:
           SKIP_DMG: '1'
         run: |
+          # gettext is keg-only in Homebrew: PATH for its CLI tools
+          # (msgfmt etc.), CPPFLAGS/LDFLAGS so configure's libintl link
+          # check (NLS support) can find its headers/lib too.
           export PATH="$(brew --prefix gettext)/bin:$PATH"
+          export CPPFLAGS="-I$(brew --prefix gettext)/include"
+          export LDFLAGS="-L$(brew --prefix gettext)/lib"
           # aclocal doesn't scan Homebrew kegs by default; wx's own macros
           # (AM_PATH_WXCONFIG etc.) live under the wxwidgets keg.
           export ACLOCAL_PATH="$(dirname "$(find -L "$(brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
@@ -87,8 +92,12 @@ jobs:
           SKIP_DMG: '1'
         run: |
           # /usr/local first so bundle.sh's own `brew` calls hit the Rosetta
-          # install, not the native arm64 one also on PATH.
+          # install, not the native arm64 one also on PATH. Same keg-only
+          # gettext CPPFLAGS/LDFLAGS as the arm64 pass, against this second,
+          # x86_64 Homebrew's own gettext keg.
           export PATH="/usr/local/bin:$(arch -x86_64 /usr/local/bin/brew --prefix gettext)/bin:$PATH"
+          export CPPFLAGS="-I$(arch -x86_64 /usr/local/bin/brew --prefix gettext)/include"
+          export LDFLAGS="-L$(arch -x86_64 /usr/local/bin/brew --prefix gettext)/lib"
           export ACLOCAL_PATH="$(dirname "$(find -L "$(arch -x86_64 /usr/local/bin/brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
           arch -x86_64 ./dist/osx/bundle.sh
           mv dist/osx/Spek.app dist/osx/Spek-x86_64.app

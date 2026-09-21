@@ -52,7 +52,12 @@ jobs:
 
       - name: Build
         run: |
+          # gettext is keg-only in Homebrew: PATH for its CLI tools
+          # (msgfmt etc.), CPPFLAGS/LDFLAGS so configure's libintl link
+          # check (NLS support) can find its headers/lib too.
           export PATH="$(brew --prefix gettext)/bin:$PATH"
+          export CPPFLAGS="-I$(brew --prefix gettext)/include"
+          export LDFLAGS="-L$(brew --prefix gettext)/lib"
           # aclocal doesn't scan Homebrew kegs by default; wx's own macros
           # (AM_PATH_WXCONFIG etc.) live under the wxwidgets keg.
           export ACLOCAL_PATH="$(dirname "$(find -L "$(brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
