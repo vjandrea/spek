@@ -50,25 +50,22 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           files: spek-*.tar.xz
 
-  macos-app:
-    strategy:
-      matrix:
-        # macos-13/14 were removed from GitHub's hosted runner fleet
-        # (GitHub only keeps the latest 2 macOS versions). Bump these again
-        # once macOS 15 ages out the same way.
-        include:
-          - os: macos-15-large
-            arch: x86_64
-          - os: macos-15
-            arch: arm64
-    runs-on: ${{ matrix.os }}
+  macos-dmg-universal:
+    # macos-13/14 were removed from GitHub's hosted runner fleet (GitHub only
+    # keeps the latest 2 macOS versions), and the only Intel label left,
+    # macos-15-large, is a paid "large" runner that bills even on public
+    # repos. So: build both slices on one free (Apple Silicon) runner, the
+    # x86_64 one via Homebrew's own documented Rosetta 2 coexistence support
+    # (native arm64 at /opt/homebrew, Rosetta/Intel at /usr/local), then lipo
+    # them together. Bump macos-15 again once it ages out the same way.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install dependencies
+      - name: Install native (arm64) dependencies
         run: brew install automake autoconf libtool pkg-config gettext ffmpeg wxwidgets
 
-      - name: Build the .app bundle
+      - name: Build the arm64 .app
         env:
           SKIP_DMG: '1'
         run: |
@@ -77,31 +74,27 @@ jobs:
           # (AM_PATH_WXCONFIG etc.) live under the wxwidgets keg.
           export ACLOCAL_PATH="$(dirname "$(find -L "$(brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
           ./dist/osx/bundle.sh
+          mv dist/osx/Spek.app dist/osx/Spek-arm64.app
 
-      - name: Upload app bundle
-        uses: actions/upload-artifact@v7
-        with:
-          name: spek-app-${{ matrix.arch }}
-          path: dist/osx/Spek.app
+      - name: Install Rosetta and x86_64 Homebrew
+        run: |
+          softwareupdate --install-rosetta --agree-to-license
+          arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          arch -x86_64 /usr/local/bin/brew install automake autoconf libtool pkg-config gettext ffmpeg wxwidgets
 
-  macos-dmg-universal:
-    needs: macos-app
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: spek-app-x86_64
-          path: artifacts/x86_64
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: spek-app-arm64
-          path: artifacts/arm64
+      - name: Build the x86_64 .app
+        env:
+          SKIP_DMG: '1'
+        run: |
+          # /usr/local first so bundle.sh's own `brew` calls hit the Rosetta
+          # install, not the native arm64 one also on PATH.
+          export PATH="/usr/local/bin:$(arch -x86_64 /usr/local/bin/brew --prefix gettext)/bin:$PATH"
+          export ACLOCAL_PATH="$(dirname "$(find -L "$(arch -x86_64 /usr/local/bin/brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
+          arch -x86_64 ./dist/osx/bundle.sh
+          mv dist/osx/Spek.app dist/osx/Spek-x86_64.app
 
       - name: Merge into a universal binary
-        run: ./dist/osx/lipo-universal.sh artifacts/x86_64/Spek.app artifacts/arm64/Spek.app dist/osx/Spek.app
+        run: ./dist/osx/lipo-universal.sh dist/osx/Spek-x86_64.app dist/osx/Spek-arm64.app dist/osx/Spek.app
 
       - name: Package the .dmg
         run: ./dist/osx/make-dmg.sh

@@ -38,15 +38,12 @@ jobs:
             config.log
 
   macos:
-    strategy:
-      fail-fast: false
-      matrix:
-        # macos-13/14 were removed from GitHub's hosted runner fleet
-        # (GitHub only keeps the latest 2 macOS versions); macos-15-large is
-        # Intel, macos-15 is Apple Silicon. Bump these again once macOS 15
-        # ages out the same way.
-        os: [macos-15-large, macos-15]
-    runs-on: ${{ matrix.os }}
+    # Apple Silicon only: macos-13/14 were removed from GitHub's hosted
+    # runner fleet, and the only remaining Intel label, macos-15-large, is a
+    # paid "large" runner that bills even on public repos. x86_64 still gets
+    # a real build on every release, via the Rosetta cross-build in
+    # release.yml; that's not worth repeating here on every push/PR.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
 
@@ -69,7 +66,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: macos-${{ matrix.os }}-test-logs
+          name: macos-test-logs
           path: |
             tests/*.log
             config.log
