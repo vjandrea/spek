@@ -26,7 +26,8 @@ env:
 
 jobs:
   source-tarball:
-    runs-on: ubuntu-latest
+    # Pinned rather than ubuntu-latest: see the note on ci.yml's linux job.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -121,7 +122,10 @@ jobs:
           files: dist/osx/spek-*-macos-universal.dmg
 
   windows-cross-compile:
-    runs-on: ubuntu-latest
+    # Pinned rather than ubuntu-latest: see the note on ci.yml's linux job.
+    # This one especially, an Ubuntu version bump could easily shift the
+    # apt package set MXE's own build needs again.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 

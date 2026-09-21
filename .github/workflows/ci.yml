@@ -8,7 +8,12 @@ on:
 
 jobs:
   linux:
-    runs-on: ubuntu-latest
+    # Pinned rather than ubuntu-latest: that label moves to Ubuntu 26 on
+    # 2026-10-19, and package names/versions shifting under a moving OS
+    # target is the single most common failure mode we hit setting this CI
+    # up (autopoint, libpcre3-dev, gtk-doc-tools, ...). Bump deliberately,
+    # tested, not automatically.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
