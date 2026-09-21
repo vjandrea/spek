@@ -132,8 +132,21 @@ jobs:
           git fetch --depth 1 origin "$MXE_REF"
           git checkout FETCH_HEAD
           git apply ../dist/win/mxe.diff
-          make pthreads ffmpeg wxwidgets -j$(nproc) JOBS=$(nproc) \
-            MXE_TARGETS='x86_64-w64-mingw32.static'
+          # MXE's package build system tracks completed packages with stamp
+          # files, so retrying after a failure resumes rather than starting
+          # over. Retried here because one of its dependencies (glib, needed
+          # as a host-side build tool) fetches a fallback subproject tarball
+          # from SourceForge if it can't find system pcre, and that download
+          # has been observed to fail transiently on GitHub-hosted runners.
+          for attempt in 1 2 3; do
+            if make pthreads ffmpeg wxwidgets -j$(nproc) JOBS=$(nproc) \
+                MXE_TARGETS='x86_64-w64-mingw32.static'; then
+              break
+            fi
+            echo "MXE build attempt $attempt failed" >&2
+            [ "$attempt" = 3 ] && exit 1
+            sleep 30
+          done
 
       - name: Cross-compile spek.exe and test.exe
         run: ./dist/win/bundle.sh
