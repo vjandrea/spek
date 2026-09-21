@@ -153,7 +153,10 @@ jobs:
         id: cache-mxe
         uses: actions/cache@v6
         with:
-          path: mxe
+          # dist/win/bundle.sh hardcodes MXE as a sibling of the repo
+          # checkout (`dist/win/../../../mxe`, matching the documented
+          # manual workflow in dist/win/README.md), not nested inside it.
+          path: ../mxe
           # MXE_REF below is pinned (see the Build MXE step); bump this key
           # too if MXE_REF changes, so a stale cache doesn't get reused.
           key: mxe-static-win64-v1-${{ hashFiles('dist/win/mxe.diff') }}
@@ -169,8 +172,8 @@ jobs:
           # a newer MXE ffmpeg/wxwidgets recipe is actually needed.
           MXE_REF: 3bfb859de48d7d6325f2e9b8a1d03b00a0e8d829
         run: |
-          git init mxe
-          cd mxe
+          git init ../mxe
+          cd ../mxe
           git remote add origin https://github.com/mxe/mxe.git
           git fetch --depth 1 origin "$MXE_REF"
           git checkout FETCH_HEAD
