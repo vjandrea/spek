@@ -34,7 +34,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            autoconf automake libtool pkg-config gettext \
+            autoconf automake autopoint libtool pkg-config gettext \
             libwxgtk3.2-dev \
             libavformat-dev libavcodec-dev libavutil-dev
 
@@ -70,6 +70,9 @@ jobs:
           SKIP_DMG: '1'
         run: |
           export PATH="$(brew --prefix gettext)/bin:$PATH"
+          # aclocal doesn't scan Homebrew kegs by default; wx's own macros
+          # (AM_PATH_WXCONFIG etc.) live under the wxwidgets keg.
+          export ACLOCAL_PATH="$(dirname "$(find "$(brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
           ./dist/osx/bundle.sh
 
       - name: Upload app bundle

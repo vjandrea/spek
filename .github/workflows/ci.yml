@@ -16,7 +16,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            autoconf automake libtool pkg-config gettext \
+            autoconf automake autopoint libtool pkg-config gettext \
             libwxgtk3.2-dev \
             libavformat-dev libavcodec-dev libavutil-dev
 
@@ -53,6 +53,9 @@ jobs:
       - name: Build
         run: |
           export PATH="$(brew --prefix gettext)/bin:$PATH"
+          # aclocal doesn't scan Homebrew kegs by default; wx's own macros
+          # (AM_PATH_WXCONFIG etc.) live under the wxwidgets keg.
+          export ACLOCAL_PATH="$(dirname "$(find "$(brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
           ./autogen.sh
           make -j$(sysctl -n hw.ncpu)
 
@@ -76,6 +79,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # mingw-w64-x86_64-libgfortran is pulled in explicitly to steer pacman's
+      # dependency solver away from the gcc-libgfortran provider, whose
+      # pinned gcc-libs version can lag the rest of the mingw64 repo and
+      # leave mingw-w64-x86_64-ffmpeg unresolved.
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -87,6 +94,7 @@ jobs:
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-gettext
+            mingw-w64-x86_64-libgfortran
             mingw-w64-x86_64-ffmpeg
             mingw-w64-x86_64-wxwidgets3.2-msw
 
