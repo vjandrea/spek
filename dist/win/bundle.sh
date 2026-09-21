@@ -21,7 +21,14 @@ rm -fr dist/win/build && mkdir dist/win/build
 
 # Compile the resource file
 rm -f dist/win/spek.res
-$("$WX_CONFIG" --rescomp) dist/win/spek.rc -O coff -o dist/win/spek.res
+# -I dist/win/manifest-fix: wx 3.1.4 (what MXE's pinned recipe builds)
+# references wx/msw/amd64_dpi_aware_pmv2.manifest from wx.rc for
+# wxUSE_DPI_AWARE_MANIFEST==2 (see spek.rc), but doesn't install that file
+# as part of `make install`, only ships it in its own source tree. Our own
+# copy under manifest-fix/ mirrors the path wx.rc expects, verbatim from
+# wx 3.1.4's source, so windres finds it without changing spek.rc's actual
+# DPI-awareness setting or depending on MXE's install completeness.
+$("$WX_CONFIG" --rescomp) -I dist/win/manifest-fix dist/win/spek.rc -O coff -o dist/win/spek.res
 mkdir -p src/dist/win && cp dist/win/spek.res src/dist/win/
 mkdir -p tests/dist/win && cp dist/win/spek.res tests/dist/win/
 
