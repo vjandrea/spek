@@ -16,7 +16,7 @@ struct FileInfo
     int samples;
 };
 
-static void test_info(AudioFile *file, const FileInfo& info)
+static void test_info(AudioFile *file, const FileInfo& info, double duration_max = -1.0)
 {
     test("error", info.error, file->get_error());
     test(file->get_codec_name(), true, !file->get_codec_name().compare(
@@ -26,7 +26,13 @@ static void test_info(AudioFile *file, const FileInfo& info)
     test("sample rate", info.sample_rate, file->get_sample_rate());
     test("bps", info.bits_per_sample, file->get_bits_per_sample());
     test("channels", info.channels, file->get_channels());
-    test("duration", info.duration, file->get_duration());
+
+    // Some FFmpeg versions trim LAME/Xing gapless-playback padding from an
+    // MP3's reported duration, some don't; Spek just forwards whatever
+    // avformat computes, so accept either when duration_max is given.
+    double actual = file->get_duration();
+    double max_duration = duration_max >= 0.0 ? duration_max : info.duration;
+    test("duration in range", true, actual >= info.duration - 1e-5 && actual <= max_duration + 1e-5);
 }
 
 static void test_read(AudioFile *file, int samples)
@@ -59,6 +65,9 @@ static void test_read(AudioFile *file, int samples)
 
 void test_audio()
 {
+    // Frame-count duration of a 5-frame MP3, for FFmpeg versions that don't
+    // trim gapless padding; see test_info().
+    const double MP3_T_MAX = 5.0 * 1152 / 44100;
     const double AAC_T = (10240 + 628) / 2.0 / 44100;
     const double DCA_T = 8.0 * 21180 / 1411216; // file size / bit rate
     const double AC3_T = 8.0 * 2490 / 190764; // file size / bit rate
@@ -111,9 +120,10 @@ void test_audio()
         auto name = item.first;
         auto info = item.second;
         auto file = audio.open(SAMPLES_DIR "/" + name, 0);
+        bool is_mp3 = name.size() >= 4 && name.compare(name.size() - 4, 4, ".mp3") == 0;
         run(
             "audio info: " + name,
-            [&] () { test_info(file.get(), info); }
+            [&] () { test_info(file.get(), info, is_mp3 ? MP3_T_MAX : -1.0); }
         );
         run(
             "audio read: " + name,
