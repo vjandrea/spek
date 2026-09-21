@@ -35,7 +35,7 @@ static void test_info(AudioFile *file, const FileInfo& info, double duration_max
     test("duration in range", true, actual >= info.duration - 1e-5 && actual <= max_duration + 1e-5);
 }
 
-static void test_read(AudioFile *file, int samples)
+static void test_read(AudioFile *file, int samples, int samples_min = -1)
 {
     if (!file->get_error()) {
         file->start(0, 1024);
@@ -52,7 +52,11 @@ static void test_read(AudioFile *file, int samples)
         }
     }
 
-    test("samples", samples, samples_read);
+    // Some FFmpeg versions decode and discard a codec's encoder
+    // priming/padding samples, some return them; Spek just reads whatever
+    // avcodec produces, so accept either when samples_min is given.
+    int min_samples = samples_min >= 0 ? samples_min : samples;
+    test("samples in range", true, samples_read >= min_samples && samples_read <= samples);
 
     if (samples > 0) {
         power /= samples_read;
@@ -115,19 +119,25 @@ void test_audio()
             {AudioError::OK, "Windows Media Audio 2", 128000, 44100, 0, 2, 0.138, 4 * 1024}},
     };
 
+    // Nominal content length (0.1s @ 44100Hz) of the AAC fixture, for
+    // FFmpeg versions that discard its encoder priming/padding; see
+    // test_read().
+    const int AAC_SAMPLES_MIN = 4410;
+
     Audio audio;
     for (const auto& item : files) {
         auto name = item.first;
         auto info = item.second;
         auto file = audio.open(SAMPLES_DIR "/" + name, 0);
         bool is_mp3 = name.size() >= 4 && name.compare(name.size() - 4, 4, ".mp3") == 0;
+        bool is_aac = name == "2ch-44100Hz-q100.m4a";
         run(
             "audio info: " + name,
             [&] () { test_info(file.get(), info, is_mp3 ? MP3_T_MAX : -1.0); }
         );
         run(
             "audio read: " + name,
-            [&] () { test_read(file.get(), info.samples); }
+            [&] () { test_read(file.get(), info.samples, is_aac ? AAC_SAMPLES_MIN : -1); }
         );
     }
 }
