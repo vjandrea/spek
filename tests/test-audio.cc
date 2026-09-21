@@ -59,7 +59,6 @@ static void test_read(AudioFile *file, int samples)
 
 void test_audio()
 {
-    const double MP3_T = 5.0 * 1152 / 44100; // 5 frames * duration per mp3 frame
     const double AAC_T = (10240 + 628) / 2.0 / 44100;
     const double DCA_T = 8.0 * 21180 / 1411216; // file size / bit rate
     const double AC3_T = 8.0 * 2490 / 190764; // file size / bit rate
@@ -84,13 +83,13 @@ void test_audio()
         {"2ch-44100Hz-16bps.wav",
             {AudioError::OK, "PCM", 0, 44100, 16, 2, 0.1, 44100 / 10}},
         {"2ch-44100Hz-128cbr.mp3",
-            {AudioError::OK, "MP3", 128000, 44100, 0, 2, MP3_T, 44100 / 10}},
+            {AudioError::OK, "MP3", 128000, 44100, 0, 2, 0.1, 44100 / 10}},
         {"2ch-44100Hz-320cbr.mp3",
-            {AudioError::OK, "MP3", 320000, 44100, 0, 2, MP3_T, 44100 / 10}},
+            {AudioError::OK, "MP3", 320000, 44100, 0, 2, 0.1, 44100 / 10}},
         {"2ch-44100Hz-V0.mp3",
-            {AudioError::OK, "MP3", 201329, 44100, 0, 2, MP3_T, 44100 / 10}},
+            {AudioError::OK, "MP3", 201329, 44100, 0, 2, 0.1, 44100 / 10}},
         {"2ch-44100Hz-V2.mp3",
-            {AudioError::OK, "MP3", 150124, 44100, 0, 2, MP3_T, 44100 / 10}},
+            {AudioError::OK, "MP3", 150124, 44100, 0, 2, 0.1, 44100 / 10}},
         {"2ch-44100Hz-q100.m4a",
             {AudioError::OK, "AAC", 159649, 44100, 0, 2, AAC_T, 5120}},
         {"2ch-44100Hz-q5.ogg",
