@@ -1,9 +1,8 @@
 name: Release
 
 # Mirrors the manual steps in dist/README.md: build the source tarball,
-# a universal (x86_64 + arm64) macOS .dmg and the Windows .msi, and attach
-# them to a draft GitHub Release so a maintainer can review before
-# publishing.
+# an Apple Silicon macOS .dmg and the Windows .msi, and attach them to a
+# draft GitHub Release so a maintainer can review before publishing.
 on:
   push:
     tags:
