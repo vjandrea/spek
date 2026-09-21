@@ -28,7 +28,7 @@ jobs:
   source-tarball:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
         run: |
@@ -60,7 +60,7 @@ jobs:
             arch: arm64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
         run: brew install automake autoconf libtool pkg-config gettext ffmpeg wxwidgets
@@ -76,7 +76,7 @@ jobs:
           ./dist/osx/bundle.sh
 
       - name: Upload app bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: spek-app-${{ matrix.arch }}
           path: dist/osx/Spek.app
@@ -85,14 +85,14 @@ jobs:
     needs: macos-app
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: spek-app-x86_64
           path: artifacts/x86_64
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: spek-app-arm64
           path: artifacts/arm64
@@ -116,7 +116,7 @@ jobs:
   windows-cross-compile:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install MXE build dependencies
         run: |
@@ -131,7 +131,7 @@ jobs:
 
       - name: Cache MXE build
         id: cache-mxe
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: mxe
           # MXE is a rolling repo; bump this key (or pin a commit below) if a
@@ -151,7 +151,7 @@ jobs:
         run: ./dist/win/bundle.sh
 
       - name: Upload build for MSI packaging
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-build
           path: |
@@ -164,9 +164,9 @@ jobs:
     needs: windows-cross-compile
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: windows-build
           path: dist/win
