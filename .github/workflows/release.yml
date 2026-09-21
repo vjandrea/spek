@@ -176,12 +176,14 @@ jobs:
           # a newer MXE ffmpeg/wxwidgets recipe is actually needed.
           MXE_REF: 3bfb859de48d7d6325f2e9b8a1d03b00a0e8d829
         run: |
+          # Captured before cd-ing out of the checkout below.
+          MXE_DIFF="$PWD/dist/win/mxe.diff"
           git init ../mxe
           cd ../mxe
           git remote add origin https://github.com/mxe/mxe.git
           git fetch --depth 1 origin "$MXE_REF"
           git checkout FETCH_HEAD
-          git apply ../dist/win/mxe.diff
+          git apply "$MXE_DIFF"
           # MXE's package build system tracks completed packages with stamp
           # files, so retrying after a failure resumes rather than starting
           # over. Retried here because one of its dependencies (glib, needed
