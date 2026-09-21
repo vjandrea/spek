@@ -1,0 +1,194 @@
+name: Release
+
+# Mirrors the manual steps in dist/README.md: build the source tarball,
+# a universal (x86_64 + arm64) macOS .dmg and the Windows .msi, and attach
+# them to a draft GitHub Release so a maintainer can review before
+# publishing.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: >-
+          Draft release tag to build against (for a test run off a branch;
+          a real release is still triggered by pushing a "v*" tag). Must not
+          collide with an existing branch name.
+        required: true
+        default: 'test-build'
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ inputs.tag_name || github.ref_name }}
+
+jobs:
+  source-tarball:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake libtool pkg-config gettext \
+            libwxgtk3.2-dev \
+            libavformat-dev libavcodec-dev libavutil-dev
+
+      - name: Build and verify the distribution
+        run: |
+          ./autogen.sh
+          make distcheck -j$(nproc)
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: spek-*.tar.xz
+
+  macos-app:
+    strategy:
+      matrix:
+        include:
+          - os: macos-13
+            arch: x86_64
+          - os: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install automake autoconf libtool pkg-config gettext ffmpeg wxwidgets
+
+      - name: Build the .app bundle
+        env:
+          SKIP_DMG: '1'
+        run: |
+          export PATH="$(brew --prefix gettext)/bin:$PATH"
+          ./dist/osx/bundle.sh
+
+      - name: Upload app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: spek-app-${{ matrix.arch }}
+          path: dist/osx/Spek.app
+
+  macos-dmg-universal:
+    needs: macos-app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: spek-app-x86_64
+          path: artifacts/x86_64
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: spek-app-arm64
+          path: artifacts/arm64
+
+      - name: Merge into a universal binary
+        run: ./dist/osx/lipo-universal.sh artifacts/x86_64/Spek.app artifacts/arm64/Spek.app dist/osx/Spek.app
+
+      - name: Package the .dmg
+        run: ./dist/osx/make-dmg.sh
+
+      - name: Rename artifact
+        run: mv dist/osx/Spek.dmg "dist/osx/spek-${{ env.RELEASE_TAG }}-macos-universal.dmg"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: dist/osx/spek-*-macos-universal.dmg
+
+  windows-cross-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MXE build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake autopoint bash bison bzip2 flex g++ g++-multilib \
+            gettext git gperf intltool libc6-dev-i386 libgdk-pixbuf2.0-dev \
+            libltdl-dev libgl-dev libpcre2-dev libssl-dev libtool-bin \
+            libxml-parser-perl lzip make openssl p7zip-full patch perl \
+            python3 python3-mako python3-packaging python3-pkg-resources \
+            python3-setuptools ruby sed sqlite3 unzip wget xz-utils
+
+      - name: Cache MXE build
+        id: cache-mxe
+        uses: actions/cache@v4
+        with:
+          path: mxe
+          # MXE is a rolling repo; bump this key (or pin a commit below) if a
+          # package recipe changes upstream and the cache needs a rebuild.
+          key: mxe-static-win64-v1-${{ hashFiles('dist/win/mxe.diff') }}
+
+      - name: Build MXE (pthreads, ffmpeg, wxwidgets for static Win64)
+        if: steps.cache-mxe.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/mxe/mxe.git
+          cd mxe
+          git apply ../dist/win/mxe.diff
+          make pthreads ffmpeg wxwidgets -j$(nproc) JOBS=$(nproc) \
+            MXE_TARGETS='x86_64-w64-mingw32.static'
+
+      - name: Cross-compile spek.exe and test.exe
+        run: ./dist/win/bundle.sh
+
+      - name: Upload build for MSI packaging
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: |
+            dist/win/Spek
+            dist/win/tests
+            dist/win/spek.zip
+            dist/win/spek.wxs
+
+  windows-msi:
+    needs: windows-cross-compile
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: dist/win
+
+      - name: Install WiX Toolset v3.11
+        run: choco install wixtoolset --version=3.11.2 -y
+
+      - name: Run the cross-compiled test suite
+        run: |
+          cd dist\win\tests
+          .\test.exe
+
+      - name: Build the MSI
+        run: |
+          cd dist\win
+          cmd /c bundle.bat
+
+      - name: Rename artifact
+        run: move dist\win\spek.msi "dist\win\spek-${{ env.RELEASE_TAG }}-windows.msi"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            dist/win/spek-*-windows.msi
+            dist/win/spek.zip

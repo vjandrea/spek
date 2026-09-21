@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake libtool pkg-config gettext \
+            libwxgtk3.2-dev \
+            libavformat-dev libavcodec-dev libavutil-dev
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          make -j$(nproc)
+
+      - name: Test
+        run: make check -j$(nproc)
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-test-logs
+          path: |
+            tests/*.log
+            config.log
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-13 = Intel, macos-14 = Apple Silicon
+        os: [macos-13, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install automake autoconf libtool pkg-config gettext ffmpeg wxwidgets
+
+      - name: Build
+        run: |
+          export PATH="$(brew --prefix gettext)/bin:$PATH"
+          ./autogen.sh
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Test
+        run: make check -j$(sysctl -n hw.ncpu)
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.os }}-test-logs
+          path: |
+            tests/*.log
+            config.log
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel
+            autotools
+            git
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-gettext
+            mingw-w64-x86_64-ffmpeg
+            mingw-w64-x86_64-wxwidgets3.2-msw
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          make -j$(nproc)
+
+      - name: Test
+        run: make check -j$(nproc)
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-test-logs
+          path: |
+            tests/*.log
+            config.log
