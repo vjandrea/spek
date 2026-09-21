@@ -43,7 +43,7 @@ jobs:
           make distcheck -j$(nproc)
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
           tag_name: ${{ env.RELEASE_TAG }}
@@ -84,7 +84,7 @@ jobs:
         run: mv dist/osx/Spek.dmg "dist/osx/spek-${{ env.RELEASE_TAG }}-macos-arm64.dmg"
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
           tag_name: ${{ env.RELEASE_TAG }}
@@ -176,7 +176,7 @@ jobs:
         run: move dist\win\spek.msi "dist\win\spek-${{ env.RELEASE_TAG }}-windows.msi"
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
           tag_name: ${{ env.RELEASE_TAG }}
