@@ -50,24 +50,25 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           files: spek-*.tar.xz
 
-  macos-dmg-universal:
-    # macos-13/14 were removed from GitHub's hosted runner fleet (GitHub only
-    # keeps the latest 2 macOS versions), and the only Intel label left,
-    # macos-15-large, is a paid "large" runner that bills even on public
-    # repos. So: build both slices on one free (Apple Silicon) runner, the
-    # x86_64 one via Homebrew's own documented Rosetta 2 coexistence support
-    # (native arm64 at /opt/homebrew, Rosetta/Intel at /usr/local), then lipo
-    # them together. Bump macos-15 again once it ages out the same way.
+  macos-dmg:
+    # Apple Silicon only. macos-13/14 were removed from GitHub's hosted
+    # runner fleet (GitHub only keeps the latest 2 macOS versions), and the
+    # only Intel label left, macos-15-large, is a paid "large" runner that
+    # bills even on public repos. A free-runner workaround (cross-build
+    # x86_64 under Rosetta 2) was tried and doesn't work either: Homebrew's
+    # installer now hard-refuses on non-arm64 ("Homebrew on macOS is only
+    # supported on Apple Silicon processors!"), and its bottles for x86_64
+    # macOS are gone too (checked the ffmpeg formula's bottle list: arm64
+    # only), so there's nothing to install even with a manual bypass.
+    # Bump macos-15 again once it ages out the same way.
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install native (arm64) dependencies
+      - name: Install dependencies
         run: brew install automake autoconf libtool pkg-config gettext ffmpeg wxwidgets
 
-      - name: Build the arm64 .app
-        env:
-          SKIP_DMG: '1'
+      - name: Build the .app and .dmg
         run: |
           # gettext is keg-only in Homebrew: PATH for its CLI tools
           # (msgfmt etc.), CPPFLAGS/LDFLAGS so configure's libintl link
@@ -79,44 +80,16 @@ jobs:
           # (AM_PATH_WXCONFIG etc.) live under the wxwidgets keg.
           export ACLOCAL_PATH="$(dirname "$(find -L "$(brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
           ./dist/osx/bundle.sh
-          mv dist/osx/Spek.app dist/osx/Spek-arm64.app
-
-      - name: Install Rosetta and x86_64 Homebrew
-        run: |
-          softwareupdate --install-rosetta --agree-to-license
-          arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          arch -x86_64 /usr/local/bin/brew install automake autoconf libtool pkg-config gettext ffmpeg wxwidgets
-
-      - name: Build the x86_64 .app
-        env:
-          SKIP_DMG: '1'
-        run: |
-          # /usr/local first so bundle.sh's own `brew` calls hit the Rosetta
-          # install, not the native arm64 one also on PATH. Same keg-only
-          # gettext CPPFLAGS/LDFLAGS as the arm64 pass, against this second,
-          # x86_64 Homebrew's own gettext keg.
-          export PATH="/usr/local/bin:$(arch -x86_64 /usr/local/bin/brew --prefix gettext)/bin:$PATH"
-          export CPPFLAGS="-I$(arch -x86_64 /usr/local/bin/brew --prefix gettext)/include"
-          export LDFLAGS="-L$(arch -x86_64 /usr/local/bin/brew --prefix gettext)/lib"
-          export ACLOCAL_PATH="$(dirname "$(find -L "$(arch -x86_64 /usr/local/bin/brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
-          arch -x86_64 ./dist/osx/bundle.sh
-          mv dist/osx/Spek.app dist/osx/Spek-x86_64.app
-
-      - name: Merge into a universal binary
-        run: ./dist/osx/lipo-universal.sh dist/osx/Spek-x86_64.app dist/osx/Spek-arm64.app dist/osx/Spek.app
-
-      - name: Package the .dmg
-        run: ./dist/osx/make-dmg.sh
 
       - name: Rename artifact
-        run: mv dist/osx/Spek.dmg "dist/osx/spek-${{ env.RELEASE_TAG }}-macos-universal.dmg"
+        run: mv dist/osx/Spek.dmg "dist/osx/spek-${{ env.RELEASE_TAG }}-macos-arm64.dmg"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           tag_name: ${{ env.RELEASE_TAG }}
-          files: dist/osx/spek-*-macos-universal.dmg
+          files: dist/osx/spek-*-macos-arm64.dmg
 
   windows-cross-compile:
     runs-on: ubuntu-latest

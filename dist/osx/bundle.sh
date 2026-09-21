@@ -61,8 +61,4 @@ done
 
 cd ../..
 
-# Set SKIP_DMG=1 to stop after producing Spek.app, e.g. to lipo two
-# arch-specific bundles into a universal one before packaging (see CI).
-if [ "${SKIP_DMG:-0}" != "1" ]; then
-    ./dist/osx/make-dmg.sh
-fi
+./dist/osx/make-dmg.sh

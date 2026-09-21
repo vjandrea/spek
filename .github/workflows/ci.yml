@@ -40,9 +40,9 @@ jobs:
   macos:
     # Apple Silicon only: macos-13/14 were removed from GitHub's hosted
     # runner fleet, and the only remaining Intel label, macos-15-large, is a
-    # paid "large" runner that bills even on public repos. x86_64 still gets
-    # a real build on every release, via the Rosetta cross-build in
-    # release.yml; that's not worth repeating here on every push/PR.
+    # paid "large" runner that bills even on public repos. No free-runner
+    # workaround exists either (see the note in release.yml), so Spek's
+    # macOS builds/releases are arm64-only for now.
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7

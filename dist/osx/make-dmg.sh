@@ -2,9 +2,8 @@
 
 set -euo pipefail
 
-# Packages an existing Spek.app (built by bundle.sh) into Spek.dmg. Split out
-# of bundle.sh so CI can build per-arch .app bundles, lipo them into a
-# universal one (see lipo-universal.sh), and only then package the dmg.
+# Packages an existing Spek.app (built by bundle.sh) into Spek.dmg. Split
+# out of bundle.sh as its own reusable step.
 
 cd "$(dirname "$0")"
 
