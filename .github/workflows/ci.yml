@@ -55,7 +55,7 @@ jobs:
           export PATH="$(brew --prefix gettext)/bin:$PATH"
           # aclocal doesn't scan Homebrew kegs by default; wx's own macros
           # (AM_PATH_WXCONFIG etc.) live under the wxwidgets keg.
-          export ACLOCAL_PATH="$(dirname "$(find "$(brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
+          export ACLOCAL_PATH="$(dirname "$(find -L "$(brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
           ./autogen.sh
           make -j$(sysctl -n hw.ncpu)
 
