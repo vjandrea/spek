@@ -139,15 +139,26 @@ jobs:
         uses: actions/cache@v6
         with:
           path: mxe
-          # MXE is a rolling repo; bump this key (or pin a commit below) if a
-          # package recipe changes upstream and the cache needs a rebuild.
+          # MXE_REF below is pinned (see the Build MXE step); bump this key
+          # too if MXE_REF changes, so a stale cache doesn't get reused.
           key: mxe-static-win64-v1-${{ hashFiles('dist/win/mxe.diff') }}
 
       - name: Build MXE (pthreads, ffmpeg, wxwidgets for static Win64)
         if: steps.cache-mxe.outputs.cache-hit != 'true'
+        env:
+          # MXE is a rolling repo with no releases/tags; dist/win/mxe.diff
+          # is a literal patch, so it needs the exact commit it was
+          # generated against, not a moving `master` that will eventually
+          # (and did) reorganize the files it touches out from under it.
+          # Bump this (and regenerate mxe.diff against the new commit) when
+          # a newer MXE ffmpeg/wxwidgets recipe is actually needed.
+          MXE_REF: 3bfb859de48d7d6325f2e9b8a1d03b00a0e8d829
         run: |
-          git clone --depth 1 https://github.com/mxe/mxe.git
+          git init mxe
           cd mxe
+          git remote add origin https://github.com/mxe/mxe.git
+          git fetch --depth 1 origin "$MXE_REF"
+          git checkout FETCH_HEAD
           git apply ../dist/win/mxe.diff
           make pthreads ffmpeg wxwidgets -j$(nproc) JOBS=$(nproc) \
             MXE_TARGETS='x86_64-w64-mingw32.static'
