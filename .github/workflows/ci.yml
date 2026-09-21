@@ -40,9 +40,11 @@ jobs:
   macos:
     # Apple Silicon only: macos-13/14 were removed from GitHub's hosted
     # runner fleet, and the only remaining Intel label, macos-15-large, is a
-    # paid "large" runner that bills even on public repos. No free-runner
-    # workaround exists either (see the note in release.yml), so Spek's
-    # macOS builds/releases are arm64-only for now.
+    # paid "large" runner that bills even on public repos. release.yml
+    # builds a real universal binary by compiling the x86_64 slice from
+    # source instead (see its macos-dmg-universal job); that's slower and
+    # not worth repeating here on every push/PR, this job just needs to
+    # confirm Spek itself still builds and passes its tests on macOS.
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7

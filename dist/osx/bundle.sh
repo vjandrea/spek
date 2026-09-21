@@ -61,4 +61,8 @@ done
 
 cd ../..
 
-./dist/osx/make-dmg.sh
+# Set SKIP_DMG=1 to stop after producing Spek.app, e.g. to lipo in an
+# x86_64 slice (see build-deps-x86_64.sh) before packaging (see release.yml).
+if [ "${SKIP_DMG:-0}" != "1" ]; then
+    ./dist/osx/make-dmg.sh
+fi

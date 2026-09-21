@@ -1,8 +1,9 @@
 name: Release
 
 # Mirrors the manual steps in dist/README.md: build the source tarball,
-# an Apple Silicon macOS .dmg and the Windows .msi, and attach them to a
-# draft GitHub Release so a maintainer can review before publishing.
+# a universal (arm64 + x86_64) macOS .dmg and the Windows .msi, and attach
+# them to a draft GitHub Release so a maintainer can review before
+# publishing.
 on:
   push:
     tags:
@@ -49,25 +50,36 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           files: spek-*.tar.xz
 
-  macos-dmg:
-    # Apple Silicon only. macos-13/14 were removed from GitHub's hosted
-    # runner fleet (GitHub only keeps the latest 2 macOS versions), and the
-    # only Intel label left, macos-15-large, is a paid "large" runner that
-    # bills even on public repos. A free-runner workaround (cross-build
-    # x86_64 under Rosetta 2) was tried and doesn't work either: Homebrew's
-    # installer now hard-refuses on non-arm64 ("Homebrew on macOS is only
-    # supported on Apple Silicon processors!"), and its bottles for x86_64
-    # macOS are gone too (checked the ffmpeg formula's bottle list: arm64
-    # only), so there's nothing to install even with a manual bypass.
-    # Bump macos-15 again once it ages out the same way.
+  macos-dmg-universal:
+    # Runs on Apple Silicon, but produces a genuine universal (arm64 +
+    # x86_64) binary. Homebrew dropped Intel macOS support entirely
+    # (installer refuses non-arm64 hosts outright, and its bottles for
+    # x86_64 macOS are gone too, checked the ffmpeg/wxwidgets formulae), so
+    # the x86_64 slice is built from source instead: FFmpeg and wxWidgets,
+    # natively cross-compiled via clang's -arch x86_64 (no Rosetta needed to
+    # build; that's only for running x86_64 code, which we never do here).
+    # See dist/osx/build-deps-x86_64.sh. Bump macos-15 again once it ages
+    # out the same way macos-13/14 did.
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install dependencies
-        run: brew install automake autoconf libtool pkg-config gettext ffmpeg wxwidgets
+      - name: Install native (arm64) dependencies
+        run: brew install automake autoconf libtool pkg-config gettext ffmpeg wxwidgets nasm
 
-      - name: Build the .app and .dmg
+      - name: Cache x86_64 FFmpeg/wxWidgets build
+        id: cache-deps-x86-64
+        uses: actions/cache@v6
+        with:
+          path: deps-x86_64
+          key: deps-x86-64-v1-${{ hashFiles('dist/osx/build-deps-x86_64.sh') }}
+
+      - name: Build FFmpeg/wxWidgets for x86_64
+        run: ./dist/osx/build-deps-x86_64.sh
+
+      - name: Build the arm64 .app
+        env:
+          SKIP_DMG: '1'
         run: |
           # gettext is keg-only in Homebrew: PATH for its CLI tools
           # (msgfmt etc.), CPPFLAGS/LDFLAGS so configure's libintl link
@@ -80,15 +92,33 @@ jobs:
           export ACLOCAL_PATH="$(dirname "$(find -L "$(brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
           ./dist/osx/bundle.sh
 
+      - name: Build the x86_64 spek binary and merge it in
+        run: |
+          mv dist/osx/Spek.app/Contents/MacOS/Spek dist/osx/Spek-arm64
+          export ACLOCAL_PATH="$PWD/deps-x86_64/share/aclocal"
+          export PKG_CONFIG_PATH="$PWD/deps-x86_64/lib/pkgconfig"
+          ./autogen.sh \
+            --host=x86_64-apple-darwin \
+            CC="clang -arch x86_64" \
+            CXX="clang++ -arch x86_64" \
+            --with-wx-config="$PWD/deps-x86_64/bin/wx-config" \
+            --disable-valgrind
+          make -C src -j$(sysctl -n hw.ncpu)
+          lipo -create dist/osx/Spek-arm64 src/spek -output dist/osx/Spek.app/Contents/MacOS/Spek
+          rm dist/osx/Spek-arm64
+
+      - name: Package the .dmg
+        run: ./dist/osx/make-dmg.sh
+
       - name: Rename artifact
-        run: mv dist/osx/Spek.dmg "dist/osx/spek-${{ env.RELEASE_TAG }}-macos-arm64.dmg"
+        run: mv dist/osx/Spek.dmg "dist/osx/spek-${{ env.RELEASE_TAG }}-macos-universal.dmg"
 
       - name: Publish release
         uses: softprops/action-gh-release@v3
         with:
           draft: true
           tag_name: ${{ env.RELEASE_TAG }}
-          files: dist/osx/spek-*-macos-arm64.dmg
+          files: dist/osx/spek-*-macos-universal.dmg
 
   windows-cross-compile:
     runs-on: ubuntu-latest
