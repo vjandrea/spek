@@ -98,14 +98,20 @@ jobs:
       - name: Install MXE build dependencies
         run: |
           sudo apt-get update
+          # libpcre3-dev (legacy PCRE1, not libpcre2-dev's PCRE2): glib
+          # 2.70.2, an MXE host-side build tool pinned by MXE_REF below,
+          # wants PCRE1 specifically. Without it on the system, its
+          # meson.build fetches PCRE1 from SourceForge as a fallback, and
+          # that download reliably fails from GitHub-hosted runners (not
+          # transient; a same-job retry loop hit it 3/3 times, while it
+          # worked fine from an unrelated residential IP).
           sudo apt-get install -y \
             autoconf automake autopoint bash bison bzip2 flex g++ g++-multilib \
             gettext git gperf intltool libc6-dev-i386 libgdk-pixbuf2.0-dev \
-            libltdl-dev libgl-dev libpcre2-dev libssl-dev libtool-bin \
+            libltdl-dev libgl-dev libpcre2-dev libpcre3-dev libssl-dev libtool-bin \
             libxml-parser-perl lzip make openssl p7zip-full patch perl \
             python3 python3-mako python3-packaging python3-pkg-resources \
             python3-setuptools ruby sed sqlite3 unzip wget xz-utils
-
       - name: Cache MXE build
         id: cache-mxe
         uses: actions/cache@v6
