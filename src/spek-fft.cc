@@ -1,8 +1,7 @@
 #include <cmath>
 
-#define __STDC_CONSTANT_MACROS
 extern "C" {
-#include <libavcodec/avfft.h>
+#include <libavutil/tx.h>
 }
 
 #include "spek-fft.h"
@@ -16,7 +15,9 @@ public:
     void execute() override;
 
 private:
-    struct RDFTContext *cx;
+    AVTXContext *ctx = nullptr;
+    av_tx_fn tx_fn = nullptr;
+    AVComplexFloat *freq;
 };
 
 std::unique_ptr<FFTPlan> FFT::create(int nbits)
@@ -24,27 +25,40 @@ std::unique_ptr<FFTPlan> FFT::create(int nbits)
     return std::unique_ptr<FFTPlan>(new FFTPlanImpl(nbits));
 }
 
-FFTPlanImpl::FFTPlanImpl(int nbits) : FFTPlan(nbits), cx(av_rdft_init(nbits, DFT_R2C))
+FFTPlanImpl::FFTPlanImpl(int nbits) : FFTPlan(nbits)
 {
+    // avfft.h's av_rdft_* (real DFT) API was removed by FFmpeg; this is its
+    // replacement. Unlike the old in-place, packed-array RDFT, this produces
+    // N/2+1 separate complex bins (including DC and Nyquist, both with a
+    // zero imaginary part), out-of-place, unscaled (matching the old
+    // av_rdft_calc, which didn't scale either).
+    //
+    // av_malloc, not std::vector: FFmpeg's SIMD tx implementations require
+    // the in/out buffers aligned beyond what a default allocator guarantees
+    // (same reason FFTPlan's own input buffer uses it). Skipping this
+    // segfaults on x86_64/AVX; arm64/NEON happened to tolerate it.
+    this->freq = (AVComplexFloat*) av_malloc(sizeof(AVComplexFloat) * this->get_output_size());
+
+    float scale = 1.0f;
+    av_tx_init(&this->ctx, &this->tx_fn, AV_TX_FLOAT_RDFT, 0, this->get_input_size(), &scale, 0);
 }
 
 FFTPlanImpl::~FFTPlanImpl()
 {
-    av_rdft_end(this->cx);
+    av_tx_uninit(&this->ctx);
+    av_freep(&this->freq);
 }
 
 void FFTPlanImpl::execute()
 {
-    av_rdft_calc(this->cx, this->get_input());
+    this->tx_fn(this->ctx, this->freq, this->get_input(), sizeof(float));
 
     // Calculate magnitudes.
     int n = this->get_input_size();
     float n2 = n * n;
-    this->set_output(0, 10.0f * log10f(this->get_input(0) * this->get_input(0) / n2));
-    this->set_output(n / 2, 10.0f * log10f(this->get_input(1) * this->get_input(1) / n2));
-    for (int i = 1; i < n / 2; i++) {
-        float re = this->get_input(i * 2);
-        float im = this->get_input(i * 2 + 1);
+    for (int i = 0; i <= n / 2; i++) {
+        float re = this->freq[i].re;
+        float im = this->freq[i].im;
         this->set_output(i, 10.0f * log10f((re * re + im * im) / n2));
     }
 }

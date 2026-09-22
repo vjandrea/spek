@@ -1,0 +1,250 @@
+name: Release
+
+# Mirrors the manual steps in dist/README.md: build the source tarball,
+# a universal (arm64 + x86_64) macOS .dmg and the Windows .msi, and attach
+# them to a draft GitHub Release so a maintainer can review before
+# publishing.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: >-
+          Draft release tag to build against (for a test run off a branch;
+          a real release is still triggered by pushing a "v*" tag). Must not
+          collide with an existing branch name.
+        required: true
+        default: 'test-build'
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ inputs.tag_name || github.ref_name }}
+
+jobs:
+  source-tarball:
+    # Pinned rather than ubuntu-latest: see the note on ci.yml's linux job.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake autopoint libtool pkg-config gettext \
+            libwxgtk3.2-dev \
+            libavformat-dev libavcodec-dev libavutil-dev
+
+      - name: Build and verify the distribution
+        run: |
+          ./autogen.sh
+          make distcheck -j$(nproc)
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: spek-*.tar.xz
+
+  macos-dmg-universal:
+    # Runs on Apple Silicon, but produces a genuine universal (arm64 +
+    # x86_64) binary. Homebrew dropped Intel macOS support entirely
+    # (installer refuses non-arm64 hosts outright, and its bottles for
+    # x86_64 macOS are gone too, checked the ffmpeg/wxwidgets formulae), so
+    # the x86_64 slice is built from source instead: FFmpeg and wxWidgets,
+    # natively cross-compiled via clang's -arch x86_64 (no Rosetta needed to
+    # build; that's only for running x86_64 code, which we never do here).
+    # See dist/osx/build-deps-x86_64.sh. Bump macos-15 again once it ages
+    # out the same way macos-13/14 did.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install native (arm64) dependencies
+        run: brew install automake autoconf libtool pkg-config gettext ffmpeg wxwidgets nasm
+
+      - name: Cache x86_64 FFmpeg/wxWidgets build
+        id: cache-deps-x86-64
+        uses: actions/cache@v6
+        with:
+          path: deps-x86_64
+          key: deps-x86-64-v1-${{ hashFiles('dist/osx/build-deps-x86_64.sh') }}
+
+      - name: Build FFmpeg/wxWidgets for x86_64
+        run: ./dist/osx/build-deps-x86_64.sh
+
+      - name: Build the arm64 .app
+        env:
+          SKIP_DMG: '1'
+        run: |
+          # gettext is keg-only in Homebrew: PATH for its CLI tools
+          # (msgfmt etc.), CPPFLAGS/LDFLAGS so configure's libintl link
+          # check (NLS support) can find its headers/lib too.
+          export PATH="$(brew --prefix gettext)/bin:$PATH"
+          export CPPFLAGS="-I$(brew --prefix gettext)/include"
+          export LDFLAGS="-L$(brew --prefix gettext)/lib"
+          # aclocal doesn't scan Homebrew kegs by default; wx's own macros
+          # (AM_PATH_WXCONFIG etc.) live under the wxwidgets keg.
+          export ACLOCAL_PATH="$(dirname "$(find -L "$(brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
+          ./dist/osx/bundle.sh
+
+      - name: Build the x86_64 spek binary and merge it in
+        run: |
+          mv dist/osx/Spek.app/Contents/MacOS/Spek dist/osx/Spek-arm64
+          export ACLOCAL_PATH="$PWD/deps-x86_64/share/aclocal"
+          export PKG_CONFIG_PATH="$PWD/deps-x86_64/lib/pkgconfig"
+          ./autogen.sh \
+            --host=x86_64-apple-darwin \
+            CC="clang -arch x86_64" \
+            CXX="clang++ -arch x86_64" \
+            --with-wx-config="$PWD/deps-x86_64/bin/wx-config" \
+            --disable-valgrind
+          make -C src -j$(sysctl -n hw.ncpu)
+          lipo -create dist/osx/Spek-arm64 src/spek -output dist/osx/Spek.app/Contents/MacOS/Spek
+          rm dist/osx/Spek-arm64
+
+      - name: Package the .dmg
+        run: ./dist/osx/make-dmg.sh
+
+      - name: Rename artifact
+        run: mv dist/osx/Spek.dmg "dist/osx/spek-${{ env.RELEASE_TAG }}-macos-universal.dmg"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: dist/osx/spek-*-macos-universal.dmg
+
+  windows-cross-compile:
+    # Pinned rather than ubuntu-latest: see the note on ci.yml's linux job.
+    # This one especially, an Ubuntu version bump could easily shift the
+    # apt package set MXE's own build needs again.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install MXE build dependencies
+        run: |
+          sudo apt-get update
+          # libpcre3-dev (legacy PCRE1, not libpcre2-dev's PCRE2): glib
+          # 2.70.2, an MXE host-side build tool pinned by MXE_REF below,
+          # wants PCRE1 specifically. Without it on the system, its
+          # meson.build fetches PCRE1 from SourceForge as a fallback, and
+          # that download reliably fails from GitHub-hosted runners (not
+          # transient; a same-job retry loop hit it 3/3 times, while it
+          # worked fine from an unrelated residential IP).
+          # gtk-doc-tools: gnutls (an MXE target-side dependency, pulled in
+          # by libbluray) runs gtkdocize during autoreconf regardless of
+          # whether docs are actually built.
+          # libclang-dev, python-is-python3: in MXE's own documented Ubuntu
+          # requirements list but missing from this job until now.
+          sudo apt-get install -y \
+            autoconf automake autopoint bash bison bzip2 flex g++ g++-multilib \
+            gettext git gperf gtk-doc-tools intltool libc6-dev-i386 \
+            libclang-dev libgdk-pixbuf2.0-dev libltdl-dev libgl-dev \
+            libpcre2-dev libpcre3-dev libssl-dev libtool-bin \
+            libxml-parser-perl lzip make openssl p7zip-full patch perl \
+            python3 python3-mako python3-packaging python3-pkg-resources \
+            python3-setuptools python-is-python3 ruby sed sqlite3 unzip \
+            wget xz-utils
+      - name: Cache MXE build
+        id: cache-mxe
+        uses: actions/cache@v6
+        with:
+          # dist/win/bundle.sh hardcodes MXE as a sibling of the repo
+          # checkout (`dist/win/../../../mxe`, matching the documented
+          # manual workflow in dist/win/README.md), not nested inside it.
+          path: ../mxe
+          # MXE_REF below is pinned (see the Build MXE step); bump this key
+          # too if MXE_REF changes, so a stale cache doesn't get reused.
+          key: mxe-static-win64-v1-${{ hashFiles('dist/win/mxe.diff') }}
+
+      - name: Build MXE (pthreads, ffmpeg, wxwidgets for static Win64)
+        if: steps.cache-mxe.outputs.cache-hit != 'true'
+        env:
+          # MXE is a rolling repo with no releases/tags; dist/win/mxe.diff
+          # is a literal patch, so it needs the exact commit it was
+          # generated against, not a moving `master` that will eventually
+          # (and did) reorganize the files it touches out from under it.
+          # Bump this (and regenerate mxe.diff against the new commit) when
+          # a newer MXE ffmpeg/wxwidgets recipe is actually needed.
+          MXE_REF: 3bfb859de48d7d6325f2e9b8a1d03b00a0e8d829
+        run: |
+          # Captured before cd-ing out of the checkout below.
+          MXE_DIFF="$PWD/dist/win/mxe.diff"
+          git init ../mxe
+          cd ../mxe
+          git remote add origin https://github.com/mxe/mxe.git
+          git fetch --depth 1 origin "$MXE_REF"
+          git checkout FETCH_HEAD
+          git apply "$MXE_DIFF"
+          # MXE's package build system tracks completed packages with stamp
+          # files, so retrying after a failure resumes rather than starting
+          # over. Retried here because one of its dependencies (glib, needed
+          # as a host-side build tool) fetches a fallback subproject tarball
+          # from SourceForge if it can't find system pcre, and that download
+          # has been observed to fail transiently on GitHub-hosted runners.
+          for attempt in 1 2 3; do
+            if make pthreads ffmpeg wxwidgets -j$(nproc) JOBS=$(nproc) \
+                MXE_TARGETS='x86_64-w64-mingw32.static'; then
+              break
+            fi
+            echo "MXE build attempt $attempt failed" >&2
+            [ "$attempt" = 3 ] && exit 1
+            sleep 30
+          done
+
+      - name: Cross-compile spek.exe and test.exe
+        run: ./dist/win/bundle.sh
+
+      - name: Upload build for MSI packaging
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-build
+          path: |
+            dist/win/Spek
+            dist/win/tests
+            dist/win/spek.zip
+            dist/win/spek.wxs
+
+  windows-msi:
+    needs: windows-cross-compile
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-build
+          path: dist/win
+
+      - name: Install WiX Toolset v3.11
+        run: choco install wixtoolset --version=3.11.2 -y
+
+      - name: Run the cross-compiled test suite
+        run: |
+          cd dist\win\tests
+          .\test.exe
+
+      - name: Build the MSI
+        run: |
+          cd dist\win
+          cmd /c bundle.bat
+
+      - name: Rename artifact
+        run: move dist\win\spek.msi "dist\win\spek-${{ env.RELEASE_TAG }}-windows.msi"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            dist/win/spek-*-windows.msi
+            dist/win/spek.zip

@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    # Pinned rather than ubuntu-latest: that label moves to Ubuntu 26 on
+    # 2026-10-19, and package names/versions shifting under a moving OS
+    # target is the single most common failure mode we hit setting this CI
+    # up (autopoint, libpcre3-dev, gtk-doc-tools, ...). Bump deliberately,
+    # tested, not automatically.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake autopoint libtool pkg-config gettext \
+            libwxgtk3.2-dev \
+            libavformat-dev libavcodec-dev libavutil-dev
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          make -j$(nproc)
+
+      - name: Test
+        run: make check -j$(nproc)
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-test-logs
+          path: |
+            tests/*.log
+            config.log
+
+  macos:
+    # Apple Silicon only: macos-13/14 were removed from GitHub's hosted
+    # runner fleet, and the only remaining Intel label, macos-15-large, is a
+    # paid "large" runner that bills even on public repos. release.yml
+    # builds a real universal binary by compiling the x86_64 slice from
+    # source instead (see its macos-dmg-universal job); that's slower and
+    # not worth repeating here on every push/PR, this job just needs to
+    # confirm Spek itself still builds and passes its tests on macOS.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: brew install automake autoconf libtool pkg-config gettext ffmpeg wxwidgets
+
+      - name: Build
+        run: |
+          # gettext is keg-only in Homebrew: PATH for its CLI tools
+          # (msgfmt etc.), CPPFLAGS/LDFLAGS so configure's libintl link
+          # check (NLS support) can find its headers/lib too.
+          export PATH="$(brew --prefix gettext)/bin:$PATH"
+          export CPPFLAGS="-I$(brew --prefix gettext)/include"
+          export LDFLAGS="-L$(brew --prefix gettext)/lib"
+          # aclocal doesn't scan Homebrew kegs by default; wx's own macros
+          # (AM_PATH_WXCONFIG etc.) live under the wxwidgets keg.
+          export ACLOCAL_PATH="$(dirname "$(find -L "$(brew --prefix wxwidgets)" -name wxwin.m4 | head -1)")"
+          ./autogen.sh
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Test
+        run: make check -j$(sysctl -n hw.ncpu)
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-test-logs
+          path: |
+            tests/*.log
+            config.log
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+
+      # mingw-w64-x86_64-libgfortran is pulled in explicitly to steer pacman's
+      # dependency solver away from the gcc-libgfortran provider, whose
+      # pinned gcc-libs version can lag the rest of the mingw64 repo and
+      # leave mingw-w64-x86_64-ffmpeg unresolved.
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel
+            autotools
+            git
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-gettext
+            mingw-w64-x86_64-libgfortran
+            mingw-w64-x86_64-ffmpeg
+            mingw-w64-x86_64-wxwidgets3.2-msw
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          make -j$(nproc)
+
+      - name: Test
+        run: make check -j$(nproc)
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-test-logs
+          path: |
+            tests/*.log
+            config.log
