@@ -17,8 +17,9 @@
 
 #include "spek-window.h"
 
-DECLARE_EVENT_TYPE(SPEK_NOTIFY_EVENT, -1)
-DEFINE_EVENT_TYPE(SPEK_NOTIFY_EVENT)
+// Not DECLARE_EVENT_TYPE/DEFINE_EVENT_TYPE: see the comment in
+// spek-events.h for why that pair breaks the Windows link against a DLL wx.
+const wxEventType SPEK_NOTIFY_EVENT = wxNewEventType();
 
 BEGIN_EVENT_TABLE(SpekWindow, wxFrame)
     EVT_MENU(wxID_OPEN, SpekWindow::on_open)
