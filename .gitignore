@@ -21,6 +21,7 @@ configure
 data/spek.desktop
 data/spek.metainfo.xml
 depcomp
+deps-x86_64/
 dist/osx/Info.plist
 dist/osx/Spek.app
 dist/osx/Spek.dmg
