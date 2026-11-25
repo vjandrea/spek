@@ -91,24 +91,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # mingw-w64-x86_64-libgfortran is pulled in explicitly to steer pacman's
+      # mingw-w64-ucrt-x86_64-libgfortran is pulled in explicitly to steer pacman's
       # dependency solver away from the gcc-libgfortran provider, whose
-      # pinned gcc-libs version can lag the rest of the mingw64 repo and
-      # leave mingw-w64-x86_64-ffmpeg unresolved.
+      # pinned gcc-libs version can lag the rest of the ucrt64 repo and
+      # leave mingw-w64-ucrt-x86_64-ffmpeg unresolved.
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
             base-devel
             autotools
             git
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-pkgconf
-            mingw-w64-x86_64-gettext
-            mingw-w64-x86_64-libgfortran
-            mingw-w64-x86_64-ffmpeg
-            mingw-w64-x86_64-wxwidgets3.2-msw
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-gettext
+            mingw-w64-ucrt-x86_64-libgfortran
+            mingw-w64-ucrt-x86_64-ffmpeg
+            mingw-w64-ucrt-x86_64-wxwidgets3.2-msw
 
       - name: Build
         run: |
