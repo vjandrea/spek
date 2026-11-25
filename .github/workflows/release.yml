@@ -163,7 +163,7 @@ jobs:
           path: ../mxe
           # MXE_REF below is pinned (see the Build MXE step); bump this key
           # too if MXE_REF changes, so a stale cache doesn't get reused.
-          key: mxe-static-win64-v1-${{ hashFiles('dist/win/mxe.diff') }}
+          key: mxe-static-win64-v2-${{ hashFiles('dist/win/mxe.diff') }}
 
       - name: Build MXE (pthreads, ffmpeg, wxwidgets for static Win64)
         if: steps.cache-mxe.outputs.cache-hit != 'true'
@@ -174,7 +174,7 @@ jobs:
           # (and did) reorganize the files it touches out from under it.
           # Bump this (and regenerate mxe.diff against the new commit) when
           # a newer MXE ffmpeg/wxwidgets recipe is actually needed.
-          MXE_REF: 3bfb859de48d7d6325f2e9b8a1d03b00a0e8d829
+          MXE_REF: 1a285d49e59160e1f7321c44ac85dcb5ba6a70bb
         run: |
           # Captured before cd-ing out of the checkout below.
           MXE_DIFF="$PWD/dist/win/mxe.diff"
