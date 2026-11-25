@@ -228,8 +228,10 @@ jobs:
           name: windows-build
           path: dist/win
 
-      - name: Install WiX Toolset v3.11
-        run: choco install wixtoolset --version=3.11.2 -y
+      # WiX 3.x ships with the windows-latest image (choco refuses to
+      # downgrade it to 3.11); bundle.bat finds it through %WIX%.
+      - name: Show the preinstalled WiX Toolset
+        run: cmd /c "echo WIX=%WIX%"
 
       - name: Run the cross-compiled test suite
         run: |
