@@ -24,7 +24,12 @@ private:
 
 typedef void (wxEvtHandler::*SpekHaveSampleEventFunction)(SpekHaveSampleEvent&);
 
-DECLARE_EVENT_TYPE(SPEK_HAVE_SAMPLE, wxID_ANY)
+// Not DECLARE_EVENT_TYPE: that macro applies wx's own WXDLLIMPEXP_CORE
+// dllimport/dllexport decoration, appropriate for wx's own event types but
+// not for one we define ourselves, and mismatches the plain (undecorated)
+// definition in spek-events.cc when wx itself is a DLL (e.g. MSYS2's mingw
+// wx package), causing a Windows link error.
+extern const wxEventType SPEK_HAVE_SAMPLE;
 
 #define SPEK_EVT_HAVE_SAMPLE(fn) \
     DECLARE_EVENT_TABLE_ENTRY(SPEK_HAVE_SAMPLE, -1, -1, \

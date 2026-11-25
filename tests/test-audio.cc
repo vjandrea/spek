@@ -16,7 +16,7 @@ struct FileInfo
     int samples;
 };
 
-static void test_info(AudioFile *file, const FileInfo& info)
+static void test_info(AudioFile *file, const FileInfo& info, double duration_max = -1.0)
 {
     test("error", info.error, file->get_error());
     test(file->get_codec_name(), true, !file->get_codec_name().compare(
@@ -26,10 +26,16 @@ static void test_info(AudioFile *file, const FileInfo& info)
     test("sample rate", info.sample_rate, file->get_sample_rate());
     test("bps", info.bits_per_sample, file->get_bits_per_sample());
     test("channels", info.channels, file->get_channels());
-    test("duration", info.duration, file->get_duration());
+
+    // Some FFmpeg versions trim LAME/Xing gapless-playback padding from an
+    // MP3's reported duration, some don't; Spek just forwards whatever
+    // avformat computes, so accept either when duration_max is given.
+    double actual = file->get_duration();
+    double max_duration = duration_max >= 0.0 ? duration_max : info.duration;
+    test("duration in range", true, actual >= info.duration - 1e-5 && actual <= max_duration + 1e-5);
 }
 
-static void test_read(AudioFile *file, int samples)
+static void test_read(AudioFile *file, int samples, int samples_min = -1)
 {
     if (!file->get_error()) {
         file->start(0, 1024);
@@ -46,7 +52,11 @@ static void test_read(AudioFile *file, int samples)
         }
     }
 
-    test("samples", samples, samples_read);
+    // Some FFmpeg versions decode and discard a codec's encoder
+    // priming/padding samples, some return them; Spek just reads whatever
+    // avcodec produces, so accept either when samples_min is given.
+    int min_samples = samples_min >= 0 ? samples_min : samples;
+    test("samples in range", true, samples_read >= min_samples && samples_read <= samples);
 
     if (samples > 0) {
         power /= samples_read;
@@ -59,7 +69,9 @@ static void test_read(AudioFile *file, int samples)
 
 void test_audio()
 {
-    const double MP3_T = 5.0 * 1152 / 44100; // 5 frames * duration per mp3 frame
+    // Frame-count duration of a 5-frame MP3, for FFmpeg versions that don't
+    // trim gapless padding; see test_info().
+    const double MP3_T_MAX = 5.0 * 1152 / 44100;
     const double AAC_T = (10240 + 628) / 2.0 / 44100;
     const double DCA_T = 8.0 * 21180 / 1411216; // file size / bit rate
     const double AC3_T = 8.0 * 2490 / 190764; // file size / bit rate
@@ -84,13 +96,13 @@ void test_audio()
         {"2ch-44100Hz-16bps.wav",
             {AudioError::OK, "PCM", 0, 44100, 16, 2, 0.1, 44100 / 10}},
         {"2ch-44100Hz-128cbr.mp3",
-            {AudioError::OK, "MP3", 128000, 44100, 0, 2, MP3_T, 44100 / 10}},
+            {AudioError::OK, "MP3", 128000, 44100, 0, 2, 0.1, 44100 / 10}},
         {"2ch-44100Hz-320cbr.mp3",
-            {AudioError::OK, "MP3", 320000, 44100, 0, 2, MP3_T, 44100 / 10}},
+            {AudioError::OK, "MP3", 320000, 44100, 0, 2, 0.1, 44100 / 10}},
         {"2ch-44100Hz-V0.mp3",
-            {AudioError::OK, "MP3", 201329, 44100, 0, 2, MP3_T, 44100 / 10}},
+            {AudioError::OK, "MP3", 201329, 44100, 0, 2, 0.1, 44100 / 10}},
         {"2ch-44100Hz-V2.mp3",
-            {AudioError::OK, "MP3", 150124, 44100, 0, 2, MP3_T, 44100 / 10}},
+            {AudioError::OK, "MP3", 150124, 44100, 0, 2, 0.1, 44100 / 10}},
         {"2ch-44100Hz-q100.m4a",
             {AudioError::OK, "AAC", 159649, 44100, 0, 2, AAC_T, 5120}},
         {"2ch-44100Hz-q5.ogg",
@@ -107,18 +119,25 @@ void test_audio()
             {AudioError::OK, "Windows Media Audio 2", 128000, 44100, 0, 2, 0.138, 4 * 1024}},
     };
 
+    // Nominal content length (0.1s @ 44100Hz) of the AAC fixture, for
+    // FFmpeg versions that discard its encoder priming/padding; see
+    // test_read().
+    const int AAC_SAMPLES_MIN = 4410;
+
     Audio audio;
     for (const auto& item : files) {
         auto name = item.first;
         auto info = item.second;
         auto file = audio.open(SAMPLES_DIR "/" + name, 0);
+        bool is_mp3 = name.size() >= 4 && name.compare(name.size() - 4, 4, ".mp3") == 0;
+        bool is_aac = name == "2ch-44100Hz-q100.m4a";
         run(
             "audio info: " + name,
-            [&] () { test_info(file.get(), info); }
+            [&] () { test_info(file.get(), info, is_mp3 ? MP3_T_MAX : -1.0); }
         );
         run(
             "audio read: " + name,
-            [&] () { test_read(file.get(), info.samples); }
+            [&] () { test_read(file.get(), info.samples, is_aac ? AAC_SAMPLES_MIN : -1); }
         );
     }
 }

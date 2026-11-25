@@ -2,6 +2,8 @@ rem This script will build an MSI installer for Win64.
 rem Check README.md in this directory for instructions.
 
 set WIX_PATH=c:\Program Files (x86)\WiX Toolset v3.11\bin
+rem The WiX installer sets %WIX% to its own folder; prefer it when present.
+if defined WIX set "WIX_PATH=%WIX%bin"
 
 cd tests
 test.exe

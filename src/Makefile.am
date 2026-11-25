@@ -50,6 +50,7 @@ spek_CPPFLAGS = \
 	$(WX_CPPFLAGS)
 
 spek_CXXFLAGS = \
+	$(AVUTIL_CFLAGS) \
 	$(WX_CXXFLAGS_ONLY)
 
 spek_LDADD = \
