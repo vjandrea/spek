@@ -174,7 +174,7 @@ jobs:
           # (and did) reorganize the files it touches out from under it.
           # Bump this (and regenerate mxe.diff against the new commit) when
           # a newer MXE ffmpeg/wxwidgets recipe is actually needed.
-          MXE_REF: 1a285d49e59160e1f7321c44ac85dcb5ba6a70bb
+          MXE_REF: 3bfb859de48d7d6325f2e9b8a1d03b00a0e8d829
         run: |
           # Captured before cd-ing out of the checkout below.
           MXE_DIFF="$PWD/dist/win/mxe.diff"
@@ -196,7 +196,11 @@ jobs:
               break
             fi
             echo "MXE build attempt $attempt failed" >&2
-            [ "$attempt" = 3 ] && exit 1
+            if [ "$attempt" = 3 ]; then
+              # MXE keeps the real compiler error in its per-package log.
+              tail -n 100 "$(ls -t log/* | head -1)"
+              exit 1
+            fi
             sleep 30
           done
 
