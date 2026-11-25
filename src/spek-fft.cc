@@ -52,6 +52,9 @@ FFTPlanImpl::~FFTPlanImpl()
 void FFTPlanImpl::execute()
 {
     this->tx_fn(this->ctx, this->freq, this->get_input(), sizeof(float));
+    // FFmpeg < 6.0 leaves the Nyquist bin's imaginary part unwritten (fixed
+    // upstream in 710d83bdd); for real input it's always zero.
+    this->freq[this->get_input_size() / 2].im = 0;
 
     // Calculate magnitudes.
     int n = this->get_input_size();
