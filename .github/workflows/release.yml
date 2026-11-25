@@ -7,13 +7,17 @@ name: Release
 on:
   push:
     tags:
+      # alexkay/spek releases from "v*" tags. Forks use "dev-*" so their
+      # tags never collide with upstream's; each job's `if` enforces which.
       - 'v*'
+      - 'dev-*'
   workflow_dispatch:
     inputs:
       tag_name:
         description: >-
           Draft release tag to build against (for a test run off a branch;
-          a real release is still triggered by pushing a "v*" tag). Must not
+          a real release is still triggered by pushing a "v*" tag upstream,
+          or a "dev-*" tag on a fork). Must not
           collide with an existing branch name.
         required: true
         default: 'test-build'
@@ -26,6 +30,9 @@ env:
 
 jobs:
   source-tarball:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref_name, github.repository == 'alexkay/spek' && 'v' || 'dev-')
     # Pinned rather than ubuntu-latest: see the note on ci.yml's linux job.
     runs-on: ubuntu-24.04
     steps:
@@ -52,6 +59,9 @@ jobs:
           files: spek-*.tar.xz
 
   macos-dmg-universal:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref_name, github.repository == 'alexkay/spek' && 'v' || 'dev-')
     # Runs on Apple Silicon, but produces a genuine universal (arm64 +
     # x86_64) binary. Homebrew dropped Intel macOS support entirely
     # (installer refuses non-arm64 hosts outright, and its bottles for
@@ -122,6 +132,9 @@ jobs:
           files: dist/osx/spek-*-macos-universal.dmg
 
   windows-cross-compile:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref_name, github.repository == 'alexkay/spek' && 'v' || 'dev-')
     # Pinned rather than ubuntu-latest: see the note on ci.yml's linux job.
     # This one especially, an Ubuntu version bump could easily shift the
     # apt package set MXE's own build needs again.
